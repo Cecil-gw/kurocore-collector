@@ -7,7 +7,7 @@ from urllib.parse import urlparse, parse_qs, quote
 import mimetypes
 
 from client import KurocoreClient
-from config import BASE_URL, DEFAULT_DB_PATH, DEFAULT_DOWNLOAD_DIR
+from config import BASE_URL, DEFAULT_DB_PATH, DEFAULT_DOWNLOAD_DIR, MAX_DOWNLOADS_PER_SESSION
 import database as db
 import parser as site_parser
 from downloader import DownloadSession
@@ -40,7 +40,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/thumb":
             self._api_thumb(params)
         elif path == "/api/progress":
-            self._json_response(progress)
+            d = dict(progress)
+            d["session_downloads"] = download_session.downloaded_count
+            d["session_max"] = MAX_DOWNLOADS_PER_SESSION
+            self._json_response(d)
         elif path == "/api/library":
             self._api_library(params)
         elif path == "/api/stats":

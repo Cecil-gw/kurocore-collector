@@ -1,5 +1,6 @@
 import random
 import time
+import requests
 
 import requests
 
@@ -7,6 +8,9 @@ from config import BROWSER_UA, REQUEST_DELAY, REQUEST_JITTER, REQUEST_TIMEOUT, P
 
 
 class KurocoreClient:
+    MAX_RETRIES = 3
+    RETRY_DELAY = 3
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
@@ -33,11 +37,21 @@ class KurocoreClient:
 
     def get(self, url: str, **kwargs) -> requests.Response:
         time.sleep(REQUEST_DELAY + random.uniform(0, REQUEST_JITTER))
-        response = self.session.get(url, timeout=REQUEST_TIMEOUT, **kwargs)
-        response.raise_for_status()
-        if "Just a moment" in response.text:
-            raise CloudflareChallengeError(url)
-        return response
+        last_err = None
+        for attempt in range(1, self.MAX_RETRIES + 1):
+            try:
+                response = self.session.get(url, timeout=REQUEST_TIMEOUT, **kwargs)
+                response.raise_for_status()
+                if "Just a moment" in response.text:
+                    raise CloudflareChallengeError(url)
+                return response
+            except CloudflareChallengeError:
+                raise
+            except requests.RequestException as e:
+                last_err = e
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(self.RETRY_DELAY * attempt)
+        raise last_err
 
     def get_html(self, url: str) -> str:
         return self.get(url).text

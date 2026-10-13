@@ -49,6 +49,8 @@ class Handler(BaseHTTPRequestHandler):
             self._api_contact_sheet()
         elif path == "/api/delete":
             self._api_delete(params)
+        elif path == "/api/clear_all":
+            self._api_clear_all()
         elif path == "/api/hot_tags":
             self._api_hot_tags()
         elif path == "/api/history":
@@ -266,6 +268,23 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute("DELETE FROM illusts WHERE kurocore_id = ?", (illust_id,))
             conn.commit()
         self._json_response({"status": "deleted", "id": illust_id})
+
+    def _api_clear_all(self):
+        rows = conn.execute("SELECT kurocore_id, file_path FROM illusts WHERE status='completed'").fetchall()
+        deleted_dirs = set()
+        for row in rows:
+            fp = row["file_path"]
+            if fp:
+                illust_dir = Path(fp).parent
+                if illust_dir.exists():
+                    deleted_dirs.add(illust_dir)
+        import shutil
+        for d in deleted_dirs:
+            shutil.rmtree(d, ignore_errors=True)
+        with db._lock:
+            conn.execute("DELETE FROM illusts")
+            conn.commit()
+        self._json_response({"status": "cleared", "deleted": len(rows)})
 
     def _api_contact_sheet(self):
         import io

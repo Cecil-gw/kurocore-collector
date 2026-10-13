@@ -375,8 +375,7 @@ async function deleteItem(id){
 }
 async function clearAll(){
   if(!confirm('⚠ 确定删除全部已下载图片？此操作不可撤销！'))return;
-  const r=await fetch('/api/library');const d=await r.json();
-  for(const item of d.items){await fetch(`/api/delete?id=${item.kurocore_id}`)}
+  await fetch('/api/clear_all');
   loadLibrary();fetchStats();
 }
 fetchStats();

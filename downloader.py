@@ -82,7 +82,7 @@ class DownloadSession:
 
             except Exception as e:
                 print(f"    [{i+1}/{len(detail.image_urls)}] ERROR: {e}")
-                self._report(detail.illust_id, detail.title, i+1, len(detail.image_urls), "error", str(e))
+                self._report(detail.illust_id, detail.title, i+1, len(detail.image_urls), "error", f"第{i+1}张: {e}")
 
         if saved_paths:
             combined_hash = hashlib.sha256("|".join(saved_paths).encode()).hexdigest()
@@ -94,9 +94,10 @@ class DownloadSession:
         else:
             db.mark_failed(self.conn, detail.illust_id)
             print(f"  [FAIL] {detail.illust_id}")
+            fail_reason = f"全部 {len(detail.image_urls)} 张下载失败"
             if self.on_error:
-                self.on_error({"illust_id": detail.illust_id, "title": detail.title, "error": "所有图片下载失败"})
-            self._report(detail.illust_id, detail.title, 0, 0, "failed", "所有图片下载失败")
+                self.on_error({"illust_id": detail.illust_id, "title": detail.title, "error": fail_reason})
+            self._report(detail.illust_id, detail.title, 0, 0, "failed", fail_reason)
             return False
 
 

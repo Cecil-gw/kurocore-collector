@@ -1,4 +1,5 @@
 import json
+import random
 import threading
 import time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -20,6 +21,7 @@ progress = {"running": False, "total": 0, "done": 0, "current": "", "error": "",
 errors = []
 _suggest_cache = None
 download_queue = []
+random_collect_active = False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -72,6 +74,8 @@ class Handler(BaseHTTPRequestHandler):
             self._api_download()
         elif self.path == "/api/download_avatars":
             self._api_download_avatars()
+        elif self.path == "/api/random_collect":
+            self._api_random_collect()
         else:
             self._json_response({"error": "not found"}, 404)
 
@@ -289,6 +293,20 @@ class Handler(BaseHTTPRequestHandler):
             conn.commit()
         self._json_response({"status": "cleared", "deleted": len(rows)})
 
+    def _api_random_collect(self):
+        global random_collect_active
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+        max_total = body.get("max", 150)
+        safe = body.get("safe", True)
+        per_tag = body.get("per_tag", 5)
+        if random_collect_active:
+            self._json_response({"error": "already running"}, 409)
+            return
+        random_collect_active = True
+        thread = threading.Thread(target=_random_collect_worker, args=(max_total, safe, per_tag), daemon=True)
+        thread.start()
+        self._json_response({"status": "started"})
+
     def _api_contact_sheet(self):
         import io
         from contact_sheet import collect_images, generate as gen_sheet
@@ -413,6 +431,67 @@ def _download_worker(illust_ids):
     progress["running"] = False
     progress["current"] = ""
     progress["errors"] = errors
+
+
+def _random_collect_worker(max_total, safe, per_tag):
+    global random_collect_active
+    try:
+        if _suggest_cache is None or len(_suggest_cache) < 10:
+            r = client.session.get(f"{BASE_URL}/asset/data/k.json", timeout=15)
+            tags = r.json()
+        else:
+            tags = _suggest_cache
+        if safe:
+            tags = [t for t in tags if "r-18" not in t.lower()]
+        if len(tags) < 10:
+            return
+
+        existing = {row["kurocore_id"] for row in conn.execute(
+            "SELECT kurocore_id FROM illusts WHERE status='completed'"
+        ).fetchall()}
+
+        progress["running"] = True
+        progress["total"] = max_total
+        progress["done"] = 0
+        progress["current"] = "随机采集中..."
+
+        collected = 0
+        used_tags = set()
+        while collected < max_total and len(used_tags) < 50:
+            tag = tags[random.randint(0, len(tags) - 1)]
+            if tag in used_tags:
+                continue
+            used_tags.add(tag)
+            progress["current"] = f"随机采集 [{tag}] {collected}/{max_total}"
+
+            try:
+                html = client.get_html(site_parser.search_url(tag, 1))
+                results, _ = site_parser.parse_search_page(html)
+                if safe:
+                    results = [r for r in results if not r.is_r18]
+                new_ids = [r.illust_id for r in results if r.illust_id not in existing][:per_tag]
+                if not new_ids:
+                    continue
+                for iid in new_ids:
+                    existing.add(iid)
+                for iid in new_ids:
+                    if collected >= max_total or download_session.remaining <= 0:
+                        break
+                    try:
+                        d_html = client.get_html(site_parser.detail_url(iid))
+                        detail = site_parser.parse_detail_page(d_html, iid)
+                        if detail.image_urls:
+                            download_session.download_detail(detail)
+                            collected += 1
+                            progress["done"] = collected
+                    except Exception:
+                        pass
+            except Exception:
+                continue
+        progress["current"] = f"随机采集完成 ({collected} 张)"
+    finally:
+        random_collect_active = False
+        progress["running"] = False
 
 
 def main():

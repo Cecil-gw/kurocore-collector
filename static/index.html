@@ -44,8 +44,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
 .empty{text-align:center;padding:100px 20px;color:#484f58}
 .empty p{font-size:16px;margin-top:8px}
 .library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
-.lib-item{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;font-size:12px;transition:border-color .2s;cursor:default}
+.lib-item{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;font-size:12px;transition:border-color .2s;cursor:pointer;position:relative}
 .lib-item:hover{border-color:#e94560}
+.lib-item.selected{border-color:#f85149;background:rgba(248,81,73,.06)}
+.lib-item .check{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;border:2px solid rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;font-size:13px;background:rgba(0,0,0,.4);transition:all .2s;z-index:2}
+.lib-item.selected .check{background:#f85149;border-color:#f85149}
+.lib-item .check::after{content:'✓';opacity:0}
+.lib-item.selected .check::after{opacity:1}
 .lib-item img{width:100%;aspect-ratio:3/4;object-fit:cover;background:#21262d;display:block}
 .lib-item .lib-meta{padding:10px 12px}
 .contact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
@@ -161,6 +166,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
     <div class="empty" id="emptyMsg"><p>🔍 输入关键词开始搜索，自动获取最多100条结果</p></div>
   </div>
   <div id="panelLibrary" class="tab-panel" style="display:none">
+    <div class="toolbar" id="libToolbar" style="display:none">
+      <div class="info" id="libInfo"></div>
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="selectLibAll()">全选</button>
+        <button class="btn btn-secondary" onclick="deselectLibAll()">取消</button>
+        <button class="btn btn-secondary" style="color:#f85149;border-color:#f85149" id="deleteSelBtn" onclick="deleteSelected()" disabled>🗑 删除选中 (<span id="delCount">0</span>)</button>
+        <button class="btn btn-secondary" style="color:#f85149;border-color:#f85149" onclick="clearAll()">🗑 清空全部</button>
+      </div>
+    </div>
     <div class="library-grid" id="libraryGrid"></div>
   </div>
   <div id="panelContact" class="tab-panel" style="display:none">
@@ -330,15 +344,37 @@ async function pollProgress(){
 async function loadLibrary(){
   const r=await fetch('/api/library');const d=await r.json();
   const grid=document.getElementById('libraryGrid');
-  if(!d.items.length){grid.innerHTML='<p style="color:#484f58;grid-column:1/-1;text-align:center;padding:60px;font-size:15px">📁 还没有下载任何图片</p>';return}
+  const toolbar=document.getElementById('libToolbar');
+  libSelected.clear();
+  if(!d.items.length){toolbar.style.display='none';grid.innerHTML='<p style="color:#484f58;grid-column:1/-1;text-align:center;padding:60px;font-size:15px">📁 还没有下载任何图片</p>';return}
+  toolbar.style.display='flex';
+  document.getElementById('libInfo').textContent=`📁 ${d.total} 项已下载`;
   grid.innerHTML='';
   d.items.forEach(item=>{
     const div=document.createElement('div');div.className='lib-item';
+    div.dataset.id=item.kurocore_id;
     const tags=(item.tags||[]).slice(0,4).join(' · ');
     const img=item.thumb_url?`<img src="${item.thumb_url}" loading="lazy" onerror="this.style.display='none'">`:'';
-    div.innerHTML=`${img}<div class="lib-meta"><div style="color:#c9d1d9;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title||'Untitled'}</div><div style="color:#7d8590;margin-top:2px">✏️ ${item.author_name||''}</div><div style="margin-top:6px;display:flex;gap:8px;align-items:center"><a href="${item.pixiv_url}" target="_blank" style="color:#e94560;text-decoration:none;font-size:11px">Pixiv ↗</a><button style="background:none;border:none;color:#f85149;cursor:pointer;font-size:11px;padding:0" onclick="deleteItem('${item.kurocore_id}')">🗑</button></div></div>`;
+    div.innerHTML=`<div class="check"></div>${img}<div class="lib-meta"><div style="color:#c9d1d9;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title||'Untitled'}</div><div style="color:#7d8590;margin-top:2px">✏️ ${item.author_name||''}</div><div style="margin-top:6px"><a href="${item.pixiv_url}" target="_blank" style="color:#e94560;text-decoration:none;font-size:11px">Pixiv ↗</a></div></div>`;
+    div.onclick=(e)=>{if(e.target.closest('a'))return;toggleLibSelect(item.kurocore_id,div)};
     grid.appendChild(div);
   });
+}
+let libSelected=new Set();
+function toggleLibSelect(id,el){
+  if(libSelected.has(id)){libSelected.delete(id);el.classList.remove('selected')}
+  else{libSelected.add(id);el.classList.add('selected')}
+  document.getElementById('delCount').textContent=libSelected.size;
+  document.getElementById('deleteSelBtn').disabled=libSelected.size===0;
+}
+function selectLibAll(){document.querySelectorAll('.lib-item').forEach(el=>{libSelected.add(el.dataset.id);el.classList.add('selected')});document.getElementById('delCount').textContent=libSelected.size;document.getElementById('deleteSelBtn').disabled=false}
+function deselectLibAll(){libSelected.clear();document.querySelectorAll('.lib-item.selected').forEach(el=>el.classList.remove('selected'));document.getElementById('delCount').textContent=0;document.getElementById('deleteSelBtn').disabled=true}
+async function deleteSelected(){
+  if(!libSelected.size)return;
+  if(!confirm(`确定删除选中的 ${libSelected.size} 项？不可撤销！`))return;
+  for(const id of libSelected){await fetch(`/api/delete?id=${id}`)}
+  libSelected.clear();
+  loadLibrary();fetchStats();
 }
 function switchTab(tab){
   document.getElementById('panelSearch').style.display=tab==='search'?'block':'none';

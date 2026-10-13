@@ -9,8 +9,8 @@ CDN_PATTERN = "https://i{kurocore_cdn}.kurocore.com"
 DEFAULT_DOWNLOAD_DIR = "gallery"
 DEFAULT_DB_PATH = "gallery.db"
 
-REQUEST_DELAY = 1.5
-REQUEST_JITTER = 0.5
+REQUEST_DELAY = 0.5
+REQUEST_JITTER = 0.3
 REQUEST_TIMEOUT = 20
 
 PROXY_URL = "http://127.0.0.1:7890"

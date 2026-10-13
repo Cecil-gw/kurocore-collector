@@ -47,6 +47,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(db.get_stats(conn))
         elif path == "/api/contact_sheet":
             self._api_contact_sheet()
+        elif path == "/api/delete":
+            self._api_delete(params)
         elif path == "/api/hot_tags":
             self._api_hot_tags()
         elif path == "/api/history":
@@ -241,6 +243,29 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 _suggest_cache = []
         self._json_response({"tags": _suggest_cache})
+
+    def _api_delete(self, params):
+        illust_id = params.get("id", [""])[0]
+        if not illust_id:
+            self._json_response({"error": "no id"}, 400)
+            return
+        row = conn.execute(
+            "SELECT file_path FROM illusts WHERE kurocore_id = ?",
+            (illust_id,),
+        ).fetchone()
+        if not row:
+            self._json_response({"error": "not found"}, 404)
+            return
+        file_path = row["file_path"]
+        if file_path:
+            illust_dir = Path(file_path).parent
+            if illust_dir.exists() and illust_dir.name.startswith(illust_id):
+                import shutil
+                shutil.rmtree(illust_dir, ignore_errors=True)
+        with db._lock:
+            conn.execute("DELETE FROM illusts WHERE kurocore_id = ?", (illust_id,))
+            conn.commit()
+        self._json_response({"status": "deleted", "id": illust_id})
 
     def _api_contact_sheet(self):
         import io

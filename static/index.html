@@ -336,7 +336,7 @@ async function loadLibrary(){
     const div=document.createElement('div');div.className='lib-item';
     const tags=(item.tags||[]).slice(0,4).join(' · ');
     const img=item.thumb_url?`<img src="${item.thumb_url}" loading="lazy" onerror="this.style.display='none'">`:'';
-    div.innerHTML=`${img}<div class="lib-meta"><div style="color:#c9d1d9;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title||'Untitled'}</div><div style="color:#7d8590;margin-top:2px">✏️ ${item.author_name||''}</div><div style="color:#484f58;font-size:11px;margin-top:4px">${tags}</div><div style="margin-top:6px"><a href="${item.pixiv_url}" target="_blank" style="color:#e94560;text-decoration:none;font-size:11px">Pixiv ↗</a></div></div>`;
+    div.innerHTML=`${img}<div class="lib-meta"><div style="color:#c9d1d9;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title||'Untitled'}</div><div style="color:#7d8590;margin-top:2px">✏️ ${item.author_name||''}</div><div style="margin-top:6px;display:flex;gap:8px;align-items:center"><a href="${item.pixiv_url}" target="_blank" style="color:#e94560;text-decoration:none;font-size:11px">Pixiv ↗</a><button style="background:none;border:none;color:#f85149;cursor:pointer;font-size:11px;padding:0" onclick="deleteItem('${item.kurocore_id}')">🗑</button></div></div>`;
     grid.appendChild(div);
   });
 }
@@ -367,6 +367,17 @@ async function loadContact(){
 }
 function exportSheet(){
   alert('联系表 PNG 已生成：contact_sheet.png\n（用命令行 python contact_sheet.py 重新生成）');
+}
+async function deleteItem(id){
+  if(!confirm('确定删除这张图片？'))return;
+  await fetch(`/api/delete?id=${id}`);
+  loadLibrary();fetchStats();
+}
+async function clearAll(){
+  if(!confirm('⚠ 确定删除全部已下载图片？此操作不可撤销！'))return;
+  const r=await fetch('/api/library');const d=await r.json();
+  for(const item of d.items){await fetch(`/api/delete?id=${item.kurocore_id}`)}
+  loadLibrary();fetchStats();
 }
 fetchStats();
 async function loadHotTags(){

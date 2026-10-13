@@ -152,6 +152,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
       <div class="actions">
         <button class="btn btn-secondary" onclick="selectAll()">全选</button>
         <button class="btn btn-secondary" onclick="deselectAll()">取消</button>
+        <button class="btn btn-primary" id="autoDlBtn" onclick="autoDownload()" style="background:#238636">⚡ 自动下载全部</button>
         <button class="btn btn-primary" id="downloadBtn" onclick="startDownload()" disabled>⬇ 下载选中 (<span id="selCount">0</span>)</button>
       </div>
     </div>
@@ -235,6 +236,18 @@ function toggleSelect(idx,el){const id=currentResults[idx].illust_id;if(selected
 function selectAll(){currentResults.forEach((r,i)=>{selected.add(r.illust_id);document.querySelector(`.card[data-idx="${i}"]`)?.classList.add('selected')});updateSelCount()}
 function deselectAll(){selected.clear();document.querySelectorAll('.card.selected').forEach(e=>e.classList.remove('selected'));updateSelCount()}
 function updateSelCount(){document.getElementById('selCount').textContent=selected.size;document.getElementById('downloadBtn').disabled=selected.size===0}
+async function autoDownload(){
+  if(!currentResults.length)return;
+  const libR=await fetch('/api/library');const libD=await libR.json();
+  const done=new Set(libD.items.map(i=>i.kurocore_id));
+  const toDl=currentResults.filter(r=>!done.has(r.illust_id)).map(r=>r.illust_id);
+  if(!toDl.length){alert('当前搜索结果已全部下载');return}
+  if(!confirm(`⚡ 自动下载 ${toDl.length} 项（跳过已下载）？\n搜索词: ${query}`))return;
+  selected.clear();
+  toDl.forEach(id=>selected.add(id));
+  updateSelCount();
+  startDownload();
+}
 async function startDownload(){
   if(!selected.size)return;document.getElementById('downloadBtn').disabled=true;
   const libR=await fetch('/api/library');const libD=await libR.json();

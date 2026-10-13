@@ -32,6 +32,8 @@ class DownloadSession:
 
     @property
     def remaining(self) -> int:
+        if MAX_DOWNLOADS_PER_SESSION <= 0:
+            return float("inf")
         return MAX_DOWNLOADS_PER_SESSION - self.downloaded_count
 
     def download_detail(self, detail: IllustDetail) -> bool:

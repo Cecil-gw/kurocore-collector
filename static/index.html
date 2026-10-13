@@ -268,10 +268,10 @@ async function autoDownload(){
   startDownload();
 }
 async function randomCollect(){
-  if(!confirm(`🎲 随机采集模式：\n后台自动随机搜索并下载\n最多150张\n\n开始？`))return;
+  if(!confirm(`🎲 随机采集模式：\n后台自动随机搜索并下载\n不限数量，停止请刷新页面\n\n开始？`))return;
   document.getElementById('randomCollectBtn').disabled=true;
   const safe=isSafeMode();
-  const r=await fetch('/api/random_collect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({max:150,safe,per_tag:5})});
+  const r=await fetch('/api/random_collect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({max:0,safe,per_tag:5})});
   const d=await r.json();
   if(d.error){alert(d.error);document.getElementById('randomCollectBtn').disabled=false;return}
   document.getElementById('progressBar').classList.add('active');

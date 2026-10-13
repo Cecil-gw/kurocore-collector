@@ -296,7 +296,7 @@ class Handler(BaseHTTPRequestHandler):
     def _api_random_collect(self):
         global random_collect_active
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-        max_total = body.get("max", 150)
+        max_total = body.get("max", 0)
         safe = body.get("safe", True)
         per_tag = body.get("per_tag", 5)
         if random_collect_active:
@@ -457,7 +457,7 @@ def _random_collect_worker(max_total, safe, per_tag):
 
         collected = 0
         used_tags = set()
-        while collected < max_total and len(used_tags) < 50:
+        while (max_total <= 0 or collected < max_total) and len(used_tags) < 200:
             tag = tags[random.randint(0, len(tags) - 1)]
             if tag in used_tags:
                 continue

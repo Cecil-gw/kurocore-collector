@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+gallery/
+gallery.db
+contact_sheet.png
+_tmp_*
+*.egg-info/
+.env

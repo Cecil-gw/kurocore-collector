@@ -19,6 +19,7 @@ download_session = DownloadSession(client, conn, DEFAULT_DOWNLOAD_DIR)
 progress = {"running": False, "total": 0, "done": 0, "current": "", "error": "", "detail": "", "file_idx": 0, "file_total": 0}
 errors = []
 _suggest_cache = None
+download_queue = []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -265,7 +266,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"error": "no illust_ids"}, 400)
             return
         if progress["running"]:
-            self._json_response({"error": "download already running"}, 409)
+            download_queue.extend(illust_ids)
+            self._json_response({"status": "queued", "count": len(illust_ids), "queue_size": len(download_queue)})
             return
 
         progress.update({"running": True, "total": len(illust_ids), "done": 0, "current": "", "error": ""})
@@ -318,6 +320,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def _download_worker(illust_ids):
+    all_ids = list(illust_ids)
     errors = []
 
     def on_progress(info):
@@ -334,22 +337,31 @@ def _download_worker(illust_ids):
     download_session.on_progress = on_progress
     download_session.on_error = on_error
 
-    for illust_id in illust_ids:
-        if download_session.remaining <= 0:
-            progress["error"] = "Session limit reached (50)"
+    while True:
+        if download_queue:
+            all_ids.extend(download_queue)
+            download_queue.clear()
+        if not all_ids:
             break
-        progress["current"] = illust_id
-        try:
-            html = client.get_html(site_parser.detail_url(illust_id))
-            detail = site_parser.parse_detail_page(html, illust_id)
-            if detail.image_urls:
-                download_session.download_detail(detail)
-            else:
-                on_error({"illust_id": illust_id, "title": "", "error": "未找到图片"})
-        except Exception as e:
-            on_error({"illust_id": illust_id, "title": "", "error": str(e)})
-        progress["done"] += 1
-        time.sleep(1.0)
+        current_batch = all_ids
+        all_ids = []
+        for illust_id in current_batch:
+            if download_session.remaining <= 0:
+                progress["error"] = "Session limit reached (50)"
+                all_ids.clear()
+                break
+            progress["current"] = illust_id
+            try:
+                html = client.get_html(site_parser.detail_url(illust_id))
+                detail = site_parser.parse_detail_page(html, illust_id)
+                if detail.image_urls:
+                    download_session.download_detail(detail)
+                else:
+                    on_error({"illust_id": illust_id, "title": "", "error": "未找到图片"})
+            except Exception as e:
+                on_error({"illust_id": illust_id, "title": "", "error": str(e)})
+            progress["done"] += 1
+            time.sleep(1.0)
 
     progress["running"] = False
     progress["current"] = ""

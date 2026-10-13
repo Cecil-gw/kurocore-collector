@@ -394,7 +394,7 @@ def _download_worker(illust_ids):
         all_ids = []
         for illust_id in current_batch:
             if download_session.remaining <= 0:
-                progress["error"] = "Session limit reached (50)"
+                progress["error"] = f"Session limit reached ({MAX_DOWNLOADS_PER_SESSION})"
                 all_ids.clear()
                 break
             progress["current"] = illust_id

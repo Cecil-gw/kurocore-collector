@@ -208,7 +208,7 @@ async function doSearch(){
   document.getElementById('pageInfo').textContent='🔍 搜索中…';
   const safe=document.getElementById('safeMode').checked?1:0;
   try{
-    const response=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&max=100&safe=${safe}`);
+    const response=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&max=150&safe=${safe}`);
     const reader=response.body.getReader();
     const decoder=new TextDecoder();
     let buffer='';

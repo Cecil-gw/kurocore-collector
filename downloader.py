@@ -36,7 +36,7 @@ class DownloadSession:
 
     def download_detail(self, detail: IllustDetail) -> bool:
         if self.remaining <= 0:
-            print("  [!] Session limit reached (50). Restart to continue.")
+            print(f"  [!] Session limit reached ({MAX_DOWNLOADS_PER_SESSION}). Restart to continue.")
             return False
 
         if db.exists_by_id(self.conn, detail.illust_id):

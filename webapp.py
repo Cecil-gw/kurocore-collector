@@ -143,7 +143,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api_search_stream(self, params):
         query = params.get("q", [""])[0].strip()
-        max_results = int(params.get("max", ["100"])[0])
+        start_page = int(params.get("start_page", ["1"])[0])
+        max_pages = int(params.get("pages", ["3"])[0])
         safe_mode = params.get("safe", ["0"])[0] == "1"
 
         self.send_response(200)
@@ -158,10 +159,11 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
-            current_page = 1
+            current_page = start_page
             total_pages = 1
             total_found = 0
-            while total_found < max_results and current_page <= total_pages:
+            pages_fetched = 0
+            while pages_fetched < max_pages and current_page <= total_pages:
                 html = client.get_html(site_parser.search_url(query, current_page))
                 page_results, total_pages = site_parser.parse_search_page(html)
                 if safe_mode:
@@ -179,8 +181,10 @@ class Handler(BaseHTTPRequestHandler):
                     "total_found": total_found,
                 })
                 current_page += 1
+                pages_fetched += 1
 
-            send_event("done", {"total_found": total_found, "pages_fetched": current_page - 1})
+            has_more = current_page <= total_pages
+            send_event("done", {"total_found": total_found, "pages_fetched": pages_fetched, "next_page": current_page, "total_pages": total_pages, "has_more": has_more})
         except Exception as e:
             try:
                 send_event("error", {"message": str(e)})

@@ -197,7 +197,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
   <p id="loadingText">搜索中…</p>
 </div>
 <script>
-let currentResults=[],selected=new Set(),query='',nextPage=1,totalSearchPages=1,currentPageStart=1;
+let currentResults=[],selected=new Set(),query='',nextPage=1,totalSearchPages=1,currentPageStart=1,allSearchResults=[];
 async function fetchStats(){
   const r=await fetch('/api/stats');const d=await r.json();
   const p=await (await fetch('/api/progress')).json();
@@ -213,7 +213,7 @@ async function doSearch(){
   document.getElementById('pageInfo').textContent='🔍 搜索中…';
   const safe=document.getElementById('safeMode').checked?1:0;
   try{
-    const response=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&start_page=1&pages=3&safe=${safe}`);
+    const response=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&start_page=1&pages=9&safe=${safe}`);
     const reader=response.body.getReader();
     const decoder=new TextDecoder();
     let buffer='';
@@ -232,11 +232,11 @@ async function doSearch(){
         if(!data)continue;
         const d=JSON.parse(data);
         if(event==='results'){
-          currentResults=currentResults.concat(d.results);
-          document.getElementById('pageInfo').textContent=`📋 已获取 ${d.total_found} 条 (第${d.page}/${d.total_pages}页)`;
-          renderResults();
+          allSearchResults=allSearchResults.concat(d.results);
         }else if(event==='done'){
           nextPage=d.next_page;totalSearchPages=d.total_pages;
+          currentResults=allSearchResults.slice(0,36);
+          renderResults();
           updatePageNav(d,currentPageStart);
         }else if(event==='error'){
           document.getElementById('pageInfo').textContent=`❌ ${d.message}`;
@@ -261,7 +261,34 @@ async function flipPage(dir){
   const newStart=currentPageStart+dir*3;
   if(newStart<1||newStart>totalSearchPages)return;
   currentPageStart=newStart;
-  await loadPages(newStart);
+  const start=(newStart-1)*12;
+  const end=start+12;
+  currentResults=allSearchResults.slice(start,end);
+  renderResults();
+  document.getElementById('pageIndicator').textContent=`第 ${newStart}-${Math.min(newStart+2,totalSearchPages)} / ${totalSearchPages} 页`;
+  document.getElementById('pageInfo').textContent=`📋 ${currentResults.length} 条 (第${newStart}-${Math.min(newStart+2,totalSearchPages)}页)`;
+  document.getElementById('prevPageBtn').disabled=newStart<=1;
+  document.getElementById('nextPageBtn').disabled=newStart+3>totalSearchPages;
+  window.scrollTo(0,0);
+  if(nextPage<totalSearchPages){
+    const pagesNeeded=end+36;
+    if(allSearchResults.length<pagesNeeded){
+      const safe=document.getElementById('safeMode').checked?1:0;
+      fetch(`/api/search_stream?q=${encodeURIComponent(query)}&start_page=${nextPage}&pages=3&safe=${safe}`)
+        .then(r=>r.body.getReader()).then(async reader=>{
+          const decoder=new TextDecoder();let buffer='';
+          while(true){const{done,value}=await reader.read();if(done)break;
+            buffer+=decoder.decode(value,{stream:true});
+            const parts=buffer.split('\n\n');buffer=parts.pop();
+            for(const part of parts){let event='',data='';
+              for(const line of part.split('\n')){if(line.startsWith('event: '))event=line.slice(7);if(line.startsWith('data: '))data=line.slice(6)}
+              if(!data)continue;const d2=JSON.parse(data);
+              if(event==='results')allSearchResults=allSearchResults.concat(d2.results);
+            }
+          }
+        });
+    }
+  }
 }
 async function loadMorePages(){
   await loadPages(nextPage);
@@ -366,12 +393,12 @@ function selectAll(){currentResults.forEach((r,i)=>{selected.add(r.illust_id);do
 function deselectAll(){selected.clear();document.querySelectorAll('.card.selected').forEach(e=>e.classList.remove('selected'));updateSelCount()}
 function updateSelCount(){document.getElementById('selCount').textContent=selected.size;document.getElementById('downloadBtn').disabled=selected.size===0}
 async function autoDownload(){
-  if(!currentResults.length)return;
+  if(!allSearchResults.length)return;
   const libR=await fetch('/api/library');const libD=await libR.json();
   const done=new Set(libD.items.map(i=>i.kurocore_id));
-  const toDl=currentResults.filter(r=>!done.has(r.illust_id)).map(r=>r.illust_id);
-  if(!toDl.length){alert('当前搜索结果已全部下载');return}
-  if(!confirm(`⚡ 自动下载 ${toDl.length} 项（跳过已下载）？\n搜索词: ${query}`))return;
+  const toDl=allSearchResults.filter(r=>!done.has(r.illust_id)).map(r=>r.illust_id);
+  if(!toDl.length){alert('所有搜索结果已全部下载');return}
+  if(!confirm(`⚡ 自动下载全部 ${toDl.length} 项（跳过已下载）？\n搜索词: ${query}`))return;
   selected.clear();
   toDl.forEach(id=>selected.add(id));
   updateSelCount();

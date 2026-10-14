@@ -270,6 +270,17 @@ async function loadPages(startPage){
   const prevBtn=document.getElementById('prevPageBtn');
   const nextBtn=document.getElementById('nextPageBtn');
   prevBtn.disabled=true;nextBtn.disabled=true;
+  if(preloadCache[startPage]){
+    currentResults=preloadCache[startPage];
+    renderResults();
+    document.getElementById('pageIndicator').textContent=`第 ${startPage}-${startPage+2} / ${totalSearchPages} 页`;
+    document.getElementById('pageInfo').textContent=`📋 ${currentResults.length} 条 (预加载)`;
+    prevBtn.disabled=startPage<=1;
+    nextBtn.disabled=startPage+3>totalSearchPages;
+    window.scrollTo(0,0);
+    if(startPage+3<totalSearchPages)setTimeout(()=>preloadPages(startPage+3),500);
+    return;
+  }
   currentResults=[];
   const safe=document.getElementById('safeMode').checked?1:0;
   try{
@@ -317,6 +328,38 @@ function updatePageNav(d,startPage){
   if(!d.has_more)nextBtn.disabled=true;
   document.getElementById('pageInfo').textContent=`📋 共 ${currentResults.length} 条 (第${startPage}-${endPage}/${d.total_pages}页)`;
   window.scrollTo(0,0);
+  if(d.has_more&&nextPage<d.total_pages){
+    setTimeout(()=>preloadPages(nextPage),1000);
+  }
+}
+let preloadCache={};
+async function preloadPages(page){
+  if(preloadCache[page])return;
+  const safe=document.getElementById('safeMode').checked?1:0;
+  try{
+    const r=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&start_page=${page}&pages=3&safe=${safe}`);
+    const reader=r.body.getReader();
+    const decoder=new TextDecoder();
+    let buffer='',results=[];
+    while(true){
+      const{done,value}=await reader.read();
+      if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const parts=buffer.split('\n\n');
+      buffer=parts.pop();
+      for(const part of parts){
+        let event='',data='';
+        for(const line of part.split('\n')){
+          if(line.startsWith('event: '))event=line.slice(7);
+          if(line.startsWith('data: '))data=line.slice(6);
+        }
+        if(!data)continue;
+        const d=JSON.parse(data);
+        if(event==='results')results=results.concat(d.results);
+      }
+    }
+    if(results.length)preloadCache[page]=results;
+  }catch(e){}
 }
 function toggleSelect(idx,el){const id=currentResults[idx].illust_id;if(selected.has(id)){selected.delete(id);el.classList.remove('selected')}else{selected.add(id);el.classList.add('selected')}updateSelCount()}
 function selectAll(){currentResults.forEach((r,i)=>{selected.add(r.illust_id);document.querySelector(`.card[data-idx="${i}"]`)?.classList.add('selected')});updateSelCount()}

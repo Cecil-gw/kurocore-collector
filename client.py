@@ -8,8 +8,8 @@ from config import BROWSER_UA, REQUEST_DELAY, REQUEST_JITTER, REQUEST_TIMEOUT, P
 
 
 class KurocoreClient:
-    MAX_RETRIES = 3
-    RETRY_DELAY = 3
+    MAX_RETRIES = 5
+    RETRY_DELAY = 4
 
     def __init__(self):
         self.session = requests.Session()

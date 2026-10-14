@@ -121,7 +121,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             all_results = []
             current_page = page
-            total_pages = 1
+            total_pages = start_page + max_pages + 100
             while len(all_results) < max_results and current_page <= total_pages:
                 html = client.get_html(site_parser.search_url(query, current_page))
                 page_results, total_pages = site_parser.parse_search_page(html)
@@ -160,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             current_page = start_page
-            total_pages = 1
+            total_pages = start_page + max_pages + 100
             total_found = 0
             pages_fetched = 0
             while pages_fetched < max_pages and current_page <= total_pages:

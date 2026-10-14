@@ -162,10 +162,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
         <button class="btn btn-primary" id="downloadBtn" onclick="startDownload()" disabled>⬇ 下载选中 (<span id="selCount">0</span>)</button>
       </div>
     </div>
-    <div style="text-align:center;margin:10px 0">
-      <button class="btn btn-secondary" id="prevPageBtn" onclick="flipPage(-1)" style="display:none">⬅️ 上一页</button>
-      <span id="pageIndicator" style="font-size:13px;color:#8b949e;margin:0 8px"></span>
-      <button class="btn btn-secondary" id="nextPageBtn" onclick="flipPage(1)" style="display:none">➡️ 下一页</button>
+    <div style="text-align:center;padding:6px 0;background:#161b22;border-bottom:1px solid #30363d">
+      <button class="btn btn-secondary" id="prevPageBtn" onclick="flipPage(-1)" style="display:none">⬅️</button>
+      <span id="pageIndicator" style="font-size:13px;color:#8b949e;margin:0 12px"></span>
+      <button class="btn btn-secondary" id="nextPageBtn" onclick="flipPage(1)" style="display:none">➡️</button>
     </div>
     <div class="grid" id="resultsGrid"></div>
     <div class="empty" id="emptyMsg"><p>🔍 输入关键词开始搜索，自动获取最多100条结果</p></div>
@@ -270,7 +270,7 @@ async function loadPages(startPage){
   const prevBtn=document.getElementById('prevPageBtn');
   const nextBtn=document.getElementById('nextPageBtn');
   prevBtn.disabled=true;nextBtn.disabled=true;
-  if(startPage===1)currentResults=[];
+  currentResults=[];
   const safe=document.getElementById('safeMode').checked?1:0;
   try{
     const response=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&start_page=${startPage}&pages=3&safe=${safe}`);
@@ -316,6 +316,7 @@ function updatePageNav(d,startPage){
   nextBtn.disabled=endPage>=d.total_pages;
   if(!d.has_more)nextBtn.disabled=true;
   document.getElementById('pageInfo').textContent=`📋 共 ${currentResults.length} 条 (第${startPage}-${endPage}/${d.total_pages}页)`;
+  window.scrollTo(0,0);
 }
 function toggleSelect(idx,el){const id=currentResults[idx].illust_id;if(selected.has(id)){selected.delete(id);el.classList.remove('selected')}else{selected.add(id);el.classList.add('selected')}updateSelCount()}
 function selectAll(){currentResults.forEach((r,i)=>{selected.add(r.illust_id);document.querySelector(`.card[data-idx="${i}"]`)?.classList.add('selected')});updateSelCount()}

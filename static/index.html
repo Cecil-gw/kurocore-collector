@@ -163,7 +163,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
       </div>
     </div>
     <div style="text-align:center;margin:10px 0">
-      <button class="btn btn-secondary" id="loadMoreBtn" onclick="loadMorePages()" style="display:none">📂 加载更多</button>
+      <button class="btn btn-secondary" id="prevPageBtn" onclick="flipPage(-1)" style="display:none">⬅️ 上一页</button>
+      <span id="pageIndicator" style="font-size:13px;color:#8b949e;margin:0 8px"></span>
+      <button class="btn btn-secondary" id="nextPageBtn" onclick="flipPage(1)" style="display:none">➡️ 下一页</button>
     </div>
     <div class="grid" id="resultsGrid"></div>
     <div class="empty" id="emptyMsg"><p>🔍 输入关键词开始搜索，自动获取最多100条结果</p></div>
@@ -195,7 +197,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
   <p id="loadingText">搜索中…</p>
 </div>
 <script>
-let currentResults=[],selected=new Set(),query='';
+let currentResults=[],selected=new Set(),query='',nextPage=1,totalSearchPages=1,currentPageStart=1;
 async function fetchStats(){
   const r=await fetch('/api/stats');const d=await r.json();
   const p=await (await fetch('/api/progress')).json();
@@ -235,14 +237,7 @@ async function doSearch(){
           renderResults();
         }else if(event==='done'){
           nextPage=d.next_page;totalSearchPages=d.total_pages;
-          const moreBtn=document.getElementById('loadMoreBtn');
-          if(d.has_more){
-            moreBtn.style.display='inline-block';
-            moreBtn.textContent=`📂 加载更多 (第${d.next_page}页起)`;
-          }else{
-            moreBtn.style.display='none';
-          }
-          document.getElementById('pageInfo').textContent=`✅ 共 ${d.total_found} 条 (第1-${d.pages_fetched}页, 共${d.total_pages}页)`;
+          updatePageNav(d);
         }else if(event==='error'){
           document.getElementById('pageInfo').textContent=`❌ ${d.message}`;
         }
@@ -262,12 +257,25 @@ function renderResults(){
     card.onclick=()=>toggleSelect(i,card);grid.appendChild(card);
   });
 }
+async function flipPage(dir){
+  const newStart=currentPageStart+dir*3;
+  if(newStart<1||newStart>totalSearchPages)return;
+  currentPageStart=newStart;
+  await loadPages(newStart);
+}
 async function loadMorePages(){
+  await loadPages(nextPage);
+}
+async function loadPages(startPage){
   const btn=document.getElementById('loadMoreBtn');
-  btn.disabled=true;btn.textContent='⏳ 加载中…';
+  const prevBtn=document.getElementById('prevPageBtn');
+  const nextBtn=document.getElementById('nextPageBtn');
+  btn.disabled=true;prevBtn.disabled=true;nextBtn.disabled=true;
+  btn.textContent='⏳ 加载中…';
+  if(startPage===1)currentResults=[];
   const safe=document.getElementById('safeMode').checked?1:0;
   try{
-    const response=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&start_page=${nextPage}&pages=3&safe=${safe}`);
+    const response=await fetch(`/api/search_stream?q=${encodeURIComponent(query)}&start_page=${startPage}&pages=3&safe=${safe}`);
     const reader=response.body.getReader();
     const decoder=new TextDecoder();
     let buffer='';
@@ -290,15 +298,27 @@ async function loadMorePages(){
           renderResults();
         }else if(event==='done'){
           nextPage=d.next_page;
-          if(d.has_more){btn.textContent=`📂 加载更多 (第${d.next_page}页起)`}
-          else{btn.style.display='none'}
-          document.getElementById('pageInfo').textContent=`📋 共 ${currentResults.length} 条 (第1-${d.next_page-1}/${d.total_pages}页)`;
+          updatePageNav(d,startPage);
         }
       }
     }
   }catch(e){btn.textContent='❌ 加载失败，点击重试'}
   btn.disabled=false;
+  prevBtn.disabled=false;nextBtn.disabled=false;
   updateSelCount();
+}
+function updatePageNav(d,startPage){
+  const prevBtn=document.getElementById('prevPageBtn');
+  const nextBtn=document.getElementById('nextPageBtn');
+  const indicator=document.getElementById('pageIndicator');
+  const endPage=startPage+d.pages_fetched-1;
+  indicator.textContent=`第 ${startPage}-${endPage} / ${d.total_pages} 页`;
+  prevBtn.style.display='inline-block';
+  nextBtn.style.display='inline-block';
+  prevBtn.disabled=startPage<=1;
+  nextBtn.disabled=endPage>=d.total_pages;
+  if(!d.has_more)nextBtn.disabled=true;
+  document.getElementById('pageInfo').textContent=`📋 共 ${currentResults.length} 条 (第${startPage}-${endPage}/${d.total_pages}页)`;
 }
 function toggleSelect(idx,el){const id=currentResults[idx].illust_id;if(selected.has(id)){selected.delete(id);el.classList.remove('selected')}else{selected.add(id);el.classList.add('selected')}updateSelCount()}
 function selectAll(){currentResults.forEach((r,i)=>{selected.add(r.illust_id);document.querySelector(`.card[data-idx="${i}"]`)?.classList.add('selected')});updateSelCount()}

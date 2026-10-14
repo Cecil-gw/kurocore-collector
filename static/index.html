@@ -267,11 +267,9 @@ async function loadMorePages(){
   await loadPages(nextPage);
 }
 async function loadPages(startPage){
-  const btn=document.getElementById('loadMoreBtn');
   const prevBtn=document.getElementById('prevPageBtn');
   const nextBtn=document.getElementById('nextPageBtn');
-  btn.disabled=true;prevBtn.disabled=true;nextBtn.disabled=true;
-  btn.textContent='⏳ 加载中…';
+  prevBtn.disabled=true;nextBtn.disabled=true;
   if(startPage===1)currentResults=[];
   const safe=document.getElementById('safeMode').checked?1:0;
   try{
@@ -302,8 +300,7 @@ async function loadPages(startPage){
         }
       }
     }
-  }catch(e){btn.textContent='❌ 加载失败，点击重试'}
-  btn.disabled=false;
+  }catch(e){console.error(e)}
   prevBtn.disabled=false;nextBtn.disabled=false;
   updateSelCount();
 }

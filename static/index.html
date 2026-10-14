@@ -237,7 +237,7 @@ async function doSearch(){
           renderResults();
         }else if(event==='done'){
           nextPage=d.next_page;totalSearchPages=d.total_pages;
-          updatePageNav(d);
+          updatePageNav(d,currentPageStart);
         }else if(event==='error'){
           document.getElementById('pageInfo').textContent=`❌ ${d.message}`;
         }

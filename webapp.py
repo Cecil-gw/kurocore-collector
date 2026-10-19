@@ -209,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api_library(self, params):
         rows = conn.execute(
-            "SELECT * FROM illusts WHERE status='completed' ORDER BY downloaded_at DESC LIMIT 200"
+            "SELECT * FROM illusts WHERE status='completed' ORDER BY downloaded_at DESC"
         ).fetchall()
         items = []
         for r in rows:

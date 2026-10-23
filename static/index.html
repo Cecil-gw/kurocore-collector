@@ -57,6 +57,11 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .empty{text-align:center;padding:80px 20px;color:var(--text3)}
 .empty p{font-size:14px;margin-top:6px}
 .lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.lib-pagenav{display:none;align-items:center;justify-content:center;gap:10px;margin-top:16px}
+.lib-pagenav button{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:6px 14px;cursor:pointer;font-size:12px;font-family:inherit}
+.lib-pagenav button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.lib-pagenav button:disabled{opacity:.35;cursor:not-allowed}
+.lib-pagenav .ind{font-size:12px;color:var(--text2);min-width:130px;text-align:center}
 .lib-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;font-size:11px;transition:border-color .15s;cursor:pointer;position:relative}
 .lib-item:hover{border-color:var(--accent)}
 .lib-item.selected{border-color:var(--danger);background:rgba(229,72,77,.04)}
@@ -183,13 +188,18 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
     <div class="toolbar" id="libToolbar" style="display:none">
       <div class="info" id="libInfo"></div>
       <div class="actions">
-        <button class="btn btn-outline" onclick="selectLibAll()">全选</button>
+        <button class="btn btn-outline" onclick="selectLibAll()">全选本页</button>
         <button class="btn btn-outline" onclick="deselectLibAll()">取消</button>
         <button class="btn btn-danger" id="deleteSelBtn" onclick="deleteSelected()" disabled>删除 (<span id="delCount">0</span>)</button>
         <button class="btn btn-danger" onclick="clearAll()">清空全部</button>
       </div>
     </div>
     <div class="lib-grid" id="libraryGrid"></div>
+    <div class="lib-pagenav" id="libPagenav">
+      <button id="libPrevBtn" onclick="loadLibrary(libPage-1)" disabled>← 上一页</button>
+      <span class="ind" id="libIndicator"></span>
+      <button id="libNextBtn" onclick="loadLibrary(libPage+1)" disabled>下一页 →</button>
+    </div>
   </div>
   <div id="panelContact" class="tab-panel">
     <div class="toolbar">
@@ -202,7 +212,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 <div class="loading-ov" id="loadingOverlay"><div class="spinner"></div><p id="loadingText"></p></div>
 <script>
 let currentResults=[],selected=new Set(),query='',nextPage=1,totalSearchPages=1,currentPageStart=1,allSearchResults=[];
-let libSelected=new Set(),preloadCache={};
+let libSelected=new Set(),preloadCache={},libPage=1,libPages=1;
 async function doSearch(){
   query=document.getElementById('searchInput').value.trim();if(!query)return;
   fetch(`/api/history?save=${encodeURIComponent(query)}`);
@@ -392,14 +402,21 @@ async function pollRandom(){
   document.getElementById('progressBar').classList.add('active');
   setTimeout(pollRandom,2000);
 }
-async function loadLibrary(){
-  const r=await fetch('/api/library');const d=await r.json();
+async function loadLibrary(page=1){
+  libPage=Math.min(Math.max(page,1),libPages);
+  const r=await fetch(`/api/library?limit=60&page=${libPage}`);const d=await r.json();
   const grid=document.getElementById('libraryGrid');
   const toolbar=document.getElementById('libToolbar');
   libSelected.clear();
   if(!d.items.length){toolbar.style.display='none';grid.innerHTML='<p style="color:var(--text3);grid-column:1/-1;text-align:center;padding:60px;font-size:14px">还没有下载图片</p>';return}
   toolbar.style.display='flex';
-  document.getElementById('libInfo').textContent=`${d.total} 项`;
+  libPages=d.pages||1;libPage=d.page||1;
+  const start=(libPage-1)*d.limit+1;const end=start+d.items.length-1;
+  document.getElementById('libInfo').textContent=`${start}–${end} / ${d.total} 项`;
+  document.getElementById('libIndicator').textContent=`${libPage} / ${libPages} 页`;
+  document.getElementById('libPrevBtn').disabled=libPage<=1;
+  document.getElementById('libNextBtn').disabled=libPage>=libPages;
+  document.getElementById('libPagenav').style.display='flex';
   grid.innerHTML='';
   d.items.forEach(item=>{
     const div=document.createElement('div');div.className='lib-item';div.dataset.id=item.kurocore_id;
@@ -423,11 +440,13 @@ async function clearAll(){
   await fetch('/api/clear_all');loadLibrary();
 }
 async function loadContact(){
-  const r=await fetch('/api/library');const d=await r.json();
+  const r=await fetch('/api/library?all=1');const d=await r.json();
   const grid=document.getElementById('contactGrid');grid.innerHTML='';let idx=0;
   d.items.forEach(item=>{(item.pages||[]).forEach(url=>{
     idx++;const div=document.createElement('div');div.className='contact-item';
-    div.innerHTML=`<img src="${url}" loading="lazy" onclick="window.open('${url}','_blank')"><span class="idx">${idx}</span>`;
+    const rel=decodeURIComponent(url.replace('/gallery/',''));
+    const thumb=`/api/local_thumb?path=${encodeURIComponent(rel)}`;
+    div.innerHTML=`<img src="${thumb}" loading="lazy" onclick="window.open('${url}','_blank')"><span class="idx">${idx}</span>`;
     grid.appendChild(div);
   })});
   document.getElementById('contactInfo').textContent=`${idx} 张`;

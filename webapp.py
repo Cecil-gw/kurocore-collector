@@ -41,6 +41,8 @@ class Handler(BaseHTTPRequestHandler):
             self._api_search_stream(params)
         elif path == "/api/thumb":
             self._api_thumb(params)
+        elif path == "/api/local_thumb":
+            self._api_local_thumb(params)
         elif path == "/api/progress":
             d = dict(progress)
             d["session_downloads"] = download_session.downloaded_count
@@ -208,8 +210,19 @@ class Handler(BaseHTTPRequestHandler):
             self._empty_image()
 
     def _api_library(self, params):
+        limit = min(max(int(params.get("limit", ["60"])[0]), 1), 200)
+        page = max(int(params.get("page", ["1"])[0]), 1)
+        offset = (page - 1) * limit
+        total = conn.execute(
+            "SELECT COUNT(*) FROM illusts WHERE status='completed'"
+        ).fetchone()[0]
+        if params.get("all", ["0"])[0] == "1":
+            limit = max(total, 1)
+            page = 1
+            offset = 0
         rows = conn.execute(
-            "SELECT * FROM illusts WHERE status='completed' ORDER BY downloaded_at DESC"
+            "SELECT * FROM illusts WHERE status='completed' ORDER BY downloaded_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
         ).fetchall()
         items = []
         for r in rows:
@@ -220,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
             if file_path:
                 normalized = file_path.replace("\\", "/")
                 if normalized.startswith("gallery/"):
-                    d["thumb_url"] = "/" + normalized
+                    d["thumb_url"] = "/api/local_thumb?path=" + quote(normalized)
                     illust_dir = Path(file_path).parent
                     if illust_dir.exists():
                         for img in sorted(illust_dir.glob("*.jpg")):
@@ -237,7 +250,48 @@ class Handler(BaseHTTPRequestHandler):
                 d["thumb_url"] = ""
                 d["pages"] = []
             items.append(d)
-        self._json_response({"items": items, "total": len(items)})
+        self._json_response({
+            "items": items,
+            "total": total,
+            "page": page,
+            "pages": (total + limit - 1) // limit,
+            "limit": limit,
+        })
+
+    def _api_local_thumb(self, params):
+        from hashlib import sha256
+        from PIL import Image
+
+        rel_path = params.get("path", [""])[0].replace("\\", "/")
+        if rel_path.startswith("gallery/"):
+            rel_path = rel_path[len("gallery/"):]
+        source = Path(DEFAULT_DOWNLOAD_DIR) / rel_path
+        try:
+            source = source.resolve()
+            source.relative_to(Path(DEFAULT_DOWNLOAD_DIR).resolve())
+        except (ValueError, OSError):
+            self.send_error(403)
+            return
+        if not source.exists() or not source.is_file():
+            self.send_error(404)
+            return
+
+        cache_dir = Path("thumbs")
+        cache_dir.mkdir(exist_ok=True)
+        cache_name = sha256(rel_path.encode("utf-8")).hexdigest() + ".jpg"
+        cache_path = cache_dir / cache_name
+        if not cache_path.exists() or cache_path.stat().st_mtime < source.stat().st_mtime:
+            with Image.open(source) as image:
+                image.thumbnail((320, 427), Image.Resampling.LANCZOS)
+                image.convert("RGB").save(cache_path, "JPEG", quality=82, optimize=True)
+
+        content = cache_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "public, max-age=604800")
+        self.end_headers()
+        self.wfile.write(content)
 
     def _api_hot_tags(self):
         try:

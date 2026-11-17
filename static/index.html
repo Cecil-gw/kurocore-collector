@@ -213,6 +213,11 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 <script>
 let currentResults=[],selected=new Set(),query='',nextPage=1,totalSearchPages=1,currentPageStart=1,allSearchResults=[];
 let libSelected=new Set(),preloadCache={},libPage=1,libPages=1;
+function mergeUnique(base,incoming){
+  const seen=new Set(base.map(r=>r.illust_id)),out=base.slice();
+  incoming.forEach(r=>{if(!seen.has(r.illust_id)){seen.add(r.illust_id);out.push(r)}});
+  return out;
+}
 async function doSearch(){
   query=document.getElementById('searchInput').value.trim();if(!query)return;
   fetch(`/api/history?save=${encodeURIComponent(query)}`);
@@ -231,7 +236,7 @@ async function doSearch(){
       for(const part of parts){let event='',data='';
         for(const line of part.split('\n')){if(line.startsWith('event: '))event=line.slice(7);if(line.startsWith('data: '))data=line.slice(6)}
         if(!data)continue;const d=JSON.parse(data);
-        if(event==='results'){allSearchResults=allSearchResults.concat(d.results)}
+        if(event==='results'){allSearchResults=mergeUnique(allSearchResults,d.results)}
         else if(event==='done'){
           nextPage=d.next_page;totalSearchPages=d.total_pages;
           currentPageStart=1;currentResults=allSearchResults.slice(0,36);
@@ -291,7 +296,7 @@ async function flipPage(dir){
             for(const part of parts){let event='',data='';
               for(const line of part.split('\n')){if(line.startsWith('event: '))event=line.slice(7);if(line.startsWith('data: '))data=line.slice(6)}
               if(!data)continue;const d2=JSON.parse(data);
-              if(event==='results')allSearchResults=allSearchResults.concat(d2.results);
+              if(event==='results')allSearchResults=mergeUnique(allSearchResults,d2.results);
             }
           }
         });
@@ -314,7 +319,7 @@ async function loadPages(startPage){
       for(const part of parts){let event='',data='';
         for(const line of part.split('\n')){if(line.startsWith('event: '))event=line.slice(7);if(line.startsWith('data: '))data=line.slice(6)}
         if(!data)continue;const d=JSON.parse(data);
-        if(event==='results'){currentResults=currentResults.concat(d.results);allSearchResults=allSearchResults.concat(d.results);renderResults()}
+        if(event==='results'){currentResults=mergeUnique(currentResults,d.results);allSearchResults=mergeUnique(allSearchResults,d.results);renderResults()}
         else if(event==='done'){nextPage=d.next_page;totalSearchPages=d.total_pages}
       }
     }
@@ -340,7 +345,7 @@ async function preloadPages(page){
       for(const part of parts){let event='',data='';
         for(const line of part.split('\n')){if(line.startsWith('event: '))event=line.slice(7);if(line.startsWith('data: '))data=line.slice(6)}
         if(!data)continue;const d=JSON.parse(data);
-        if(event==='results')results=results.concat(d.results);
+        if(event==='results')results=mergeUnique(results,d.results);
       }
     }
     if(results.length)preloadCache[page]=results;
@@ -348,7 +353,7 @@ async function preloadPages(page){
 }
 async function startDownload(){
   if(!selected.size)return;document.getElementById('downloadBtn').disabled=true;
-  const libR=await fetch('/api/library');const libD=await libR.json();
+  const libR=await fetch('/api/library?all=1');const libD=await libR.json();
   const already=libD.items.filter(i=>selected.has(i.kurocore_id));
   if(already.length){
     const names=already.map(i=>`「${i.title||i.kurocore_id}」`).join('、');
@@ -379,9 +384,12 @@ async function pollProgress(){
 }
 async function autoDownload(){
   if(!allSearchResults.length)return;
-  const libR=await fetch('/api/library');const libD=await libR.json();
+  const libR=await fetch('/api/library?all=1');const libD=await libR.json();
   const done=new Set(libD.items.map(i=>i.kurocore_id));
-  const toDl=allSearchResults.filter(r=>!done.has(r.illust_id)).map(r=>r.illust_id);
+  const seen=new Set(),toDl=[];
+  allSearchResults.forEach(r=>{
+    if(!done.has(r.illust_id)&&!seen.has(r.illust_id)){seen.add(r.illust_id);toDl.push(r.illust_id)}
+  });
   if(!toDl.length){alert('已全部下载');return}
   if(!confirm(`下载全部 ${toDl.length} 项？`))return;
   selected.clear();toDl.forEach(id=>selected.add(id));updateSelCount();startDownload();

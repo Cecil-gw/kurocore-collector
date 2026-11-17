@@ -122,6 +122,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             all_results = []
+            seen_ids = set()
             current_page = page
             total_pages = start_page + max_pages + 100
             while len(all_results) < max_results and current_page <= total_pages:
@@ -129,7 +130,10 @@ class Handler(BaseHTTPRequestHandler):
                 page_results, total_pages = site_parser.parse_search_page(html)
                 if safe_mode:
                     page_results = [r for r in page_results if not r.is_r18]
-                all_results.extend(page_results)
+                for result in page_results:
+                    if result.illust_id not in seen_ids:
+                        seen_ids.add(result.illust_id)
+                        all_results.append(result)
                 current_page += 1
                 if not page_results:
                     break
@@ -165,6 +169,7 @@ class Handler(BaseHTTPRequestHandler):
             total_pages = start_page + max_pages + 100
             total_found = 0
             pages_fetched = 0
+            seen_ids = set()
             while pages_fetched < max_pages and current_page <= total_pages:
                 html = client.get_html(site_parser.search_url(query, current_page))
                 page_results, total_pages = site_parser.parse_search_page(html)
@@ -173,6 +178,12 @@ class Handler(BaseHTTPRequestHandler):
 
                 if not page_results:
                     break
+                page_results = [r for r in page_results if r.illust_id not in seen_ids]
+                seen_ids.update(r.illust_id for r in page_results)
+                if not page_results:
+                    current_page += 1
+                    pages_fetched += 1
+                    continue
 
                 batch = [vars(r) for r in page_results]
                 total_found += len(batch)
@@ -384,7 +395,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api_download(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-        illust_ids = body.get("illust_ids", [])
+        illust_ids = list(dict.fromkeys(body.get("illust_ids", [])))
         if not illust_ids:
             self._json_response({"error": "no illust_ids"}, 400)
             return
@@ -462,7 +473,7 @@ def _download_worker(illust_ids):
 
     while True:
         if download_queue:
-            all_ids.extend(download_queue)
+            all_ids.extend(iid for iid in dict.fromkeys(download_queue) if iid not in all_ids)
             download_queue.clear()
         if not all_ids:
             break

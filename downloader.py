@@ -55,6 +55,8 @@ class DownloadSession:
         illust_dir.mkdir(parents=True, exist_ok=True)
 
         saved_paths = []
+        saved_hashes = []
+        batch_hashes = set()
         for i, url in enumerate(detail.image_urls):
             if self.remaining <= 0:
                 print("  [!] Session limit reached mid-download.")
@@ -69,13 +71,15 @@ class DownloadSession:
                 content = self.client.download(url)
                 file_hash = hashlib.sha256(content).hexdigest()
 
-                if db.exists_by_hash(self.conn, file_hash):
+                if file_hash in batch_hashes or db.exists_by_hash(self.conn, file_hash):
                     print(f"    [{i+1}/{len(detail.image_urls)}] duplicate content, skipping.")
                     self._report(detail.illust_id, detail.title, i+1, len(detail.image_urls), "duplicate", "内容重复，跳过")
                     continue
 
                 filepath.write_bytes(content)
                 saved_paths.append(str(filepath))
+                saved_hashes.append(file_hash)
+                batch_hashes.add(file_hash)
                 self.downloaded_count += 1
                 print(f"    [{i+1}/{len(detail.image_urls)}] saved {filename} ({len(content)//1024}KB)")
                 elapsed = time.time() - start_time
@@ -87,8 +91,7 @@ class DownloadSession:
                 self._report(detail.illust_id, detail.title, i+1, len(detail.image_urls), "error", f"第{i+1}张: {e}")
 
         if saved_paths:
-            combined_hash = hashlib.sha256("|".join(saved_paths).encode()).hexdigest()
-            db.mark_completed(self.conn, detail.illust_id, saved_paths[0], combined_hash)
+            db.mark_completed(self.conn, detail.illust_id, saved_paths[0], saved_hashes[0])
             print(f"  [OK] {detail.illust_id} '{detail.title}' ({len(saved_paths)} files)")
             self._report(detail.illust_id, detail.title, 0, len(detail.image_urls), "done",
                         f"完成 {len(saved_paths)}/{len(detail.image_urls)} 张")
